@@ -2,6 +2,8 @@
 
 Java 17 · Spring Boot 3 · PostgreSQL / PostGIS · plain SQL migrations (no Flyway)
 
+**Full local + production setup:** see **[SETUP.md](SETUP.md)** (macOS, Windows, Linux VPS with/without Docker).
+
 ## Quick start
 
 ```bash
@@ -26,7 +28,7 @@ mvn spring-boot:run
 | Area | Endpoints |
 |------|-----------|
 | Auth | `POST /api/v1/auth/otp/request`, `/otp/verify`, `/refresh` |
-| Profile | `GET/PUT /api/v1/profile/me`, `/me/places`, `/me/interests` |
+| Profile | `GET/PUT /api/v1/profile/me`, `/me/places`, `/me/interests`, office-email verify routes |
 | Vehicles | `GET/POST /api/v1/vehicles`, `PUT/DELETE /{id}`, `POST /{id}/primary` |
 | Rides | `POST /api/v1/rides`, `/mine`, `/open`, `/search`, `/{id}`, `/{id}/cancel`, `/{id}/share` |
 | Bookings | `POST /api/v1/bookings`, `/mine`, `/ride/{id}`, `/{id}/decide`, `/{id}/cancel` |

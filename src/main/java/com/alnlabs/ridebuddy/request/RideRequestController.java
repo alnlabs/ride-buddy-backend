@@ -43,6 +43,11 @@ public class RideRequestController {
         return service.get(id, AuthUser.requireUserId());
     }
 
+    @GetMapping("/ride-requests/{id}/share")
+    public com.alnlabs.ridebuddy.share.SharePayload share(@PathVariable UUID id) {
+        return service.share(id);
+    }
+
     @PostMapping("/ride-requests/{id}/cancel")
     public RideRequestService.RideRequestResponse cancel(@PathVariable UUID id) {
         return service.cancel(AuthUser.requireUserId(), id);

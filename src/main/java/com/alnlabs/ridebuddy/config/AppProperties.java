@@ -8,5 +8,11 @@ public record AppProperties(
         Share share
 ) {
     public record Cors(String allowedOrigins) {}
-    public record Share(String rideBaseUrl) {}
+
+    public record Share(
+            String rideBaseUrl,
+            String needBaseUrl,
+            String appStoreUrl,
+            String playStoreUrl
+    ) {}
 }

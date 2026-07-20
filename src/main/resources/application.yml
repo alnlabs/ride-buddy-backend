@@ -43,7 +43,10 @@ app:
   cors:
     allowed-origins: ${APP_CORS_ORIGINS:*}
   share:
-    ride-base-url: https://ridebuddy.alnlabs.com/r
+    ride-base-url: ${APP_SHARE_RIDE_BASE_URL:https://ridebuddy.alnlabs.com/r}
+    need-base-url: ${APP_SHARE_NEED_BASE_URL:https://ridebuddy.alnlabs.com/n}
+    app-store-url: ${APP_SHARE_APP_STORE_URL:https://ridebuddy.alnlabs.com}
+    play-store-url: ${APP_SHARE_PLAY_STORE_URL:https://ridebuddy.alnlabs.com}
 
 logging:
   level:

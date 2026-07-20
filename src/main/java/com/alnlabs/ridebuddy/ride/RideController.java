@@ -1,6 +1,7 @@
 package com.alnlabs.ridebuddy.ride;
 
 import com.alnlabs.ridebuddy.common.AuthUser;
+import com.alnlabs.ridebuddy.share.SharePayload;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -67,7 +68,7 @@ public class RideController {
     }
 
     @GetMapping("/{id}/share")
-    public RideService.SharePayload share(@PathVariable UUID id) {
+    public SharePayload share(@PathVariable UUID id) {
         return rideService.share(id);
     }
 }

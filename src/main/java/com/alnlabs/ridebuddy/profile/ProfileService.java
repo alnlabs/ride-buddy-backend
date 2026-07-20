@@ -33,6 +33,7 @@ public class ProfileService {
     private final ProfileRepository profileRepo;
     private final ProfileInterestRepository interestRepo;
     private final VehicleRepository vehicleRepo;
+    private final UserPlaceRepository userPlaceRepo;
     private final MailService mailService;
     private final AuthProperties authProperties;
 
@@ -40,12 +41,14 @@ public class ProfileService {
             ProfileRepository profileRepo,
             ProfileInterestRepository interestRepo,
             VehicleRepository vehicleRepo,
+            UserPlaceRepository userPlaceRepo,
             MailService mailService,
             AuthProperties authProperties
     ) {
         this.profileRepo = profileRepo;
         this.interestRepo = interestRepo;
         this.vehicleRepo = vehicleRepo;
+        this.userPlaceRepo = userPlaceRepo;
         this.mailService = mailService;
         this.authProperties = authProperties;
     }
@@ -212,16 +215,43 @@ public class ProfileService {
             p.setHomeLng(req.homeLng());
             p.setHomeLabel(req.homeLabel());
             p.setHomeAreaSlug(GeoUtils.areaSlug(req.homeLabel()));
+            upsertPrimaryPlace(userId, "home", req.homeLabel(), req.homeLat(), req.homeLng());
         }
         if (req.officeLat() != null && req.officeLng() != null) {
             p.setOfficeLat(req.officeLat());
             p.setOfficeLng(req.officeLng());
             p.setOfficeLabel(req.officeLabel());
             p.setOfficeAreaSlug(GeoUtils.areaSlug(req.officeLabel()));
+            upsertPrimaryPlace(userId, "office", req.officeLabel(), req.officeLat(), req.officeLng());
         }
         recalculateStrength(p, userId);
         profileRepo.save(p);
         return getMe(userId);
+    }
+
+    private void upsertPrimaryPlace(UUID userId, String kind, String label, double lat, double lng) {
+        String privateLabel = (label != null && !label.isBlank()) ? label.trim() : ("home".equals(kind) ? "Home" : "Office");
+        UserPlaceEntity existing = userPlaceRepo.findFirstByUserIdAndKindAndPrimaryTrue(userId, kind).orElse(null);
+        if (existing == null) {
+            userPlaceRepo.clearPrimary(userId, kind);
+            UserPlaceEntity e = new UserPlaceEntity();
+            e.setUserId(userId);
+            e.setKind(kind);
+            e.setPrivateLabel(privateLabel);
+            e.setPublicShort(privateLabel);
+            e.setFullAddress(label);
+            e.setLat(lat);
+            e.setLng(lng);
+            e.setPrimary(true);
+            userPlaceRepo.save(e);
+        } else {
+            existing.setPrivateLabel(privateLabel);
+            existing.setPublicShort(privateLabel);
+            existing.setFullAddress(label);
+            existing.setLat(lat);
+            existing.setLng(lng);
+            userPlaceRepo.save(existing);
+        }
     }
 
     @Transactional

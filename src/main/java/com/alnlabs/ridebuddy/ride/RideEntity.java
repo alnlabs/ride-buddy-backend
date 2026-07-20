@@ -45,6 +45,12 @@ public class RideEntity {
     @Column(name = "origin_label", nullable = false)
     private String originLabel;
 
+    @Column(name = "origin_full_address")
+    private String originFullAddress;
+
+    @Column(name = "origin_private_label")
+    private String originPrivateLabel;
+
     @Column(name = "destination_lat", nullable = false)
     private double destinationLat;
 
@@ -53,6 +59,12 @@ public class RideEntity {
 
     @Column(name = "destination_label", nullable = false)
     private String destinationLabel;
+
+    @Column(name = "destination_full_address")
+    private String destinationFullAddress;
+
+    @Column(name = "destination_private_label")
+    private String destinationPrivateLabel;
 
     @Column(name = "depart_at", nullable = false)
     private Instant departAt;
@@ -119,12 +131,20 @@ public class RideEntity {
     public void setOriginLng(double originLng) { this.originLng = originLng; }
     public String getOriginLabel() { return originLabel; }
     public void setOriginLabel(String originLabel) { this.originLabel = originLabel; }
+    public String getOriginFullAddress() { return originFullAddress; }
+    public void setOriginFullAddress(String originFullAddress) { this.originFullAddress = originFullAddress; }
+    public String getOriginPrivateLabel() { return originPrivateLabel; }
+    public void setOriginPrivateLabel(String originPrivateLabel) { this.originPrivateLabel = originPrivateLabel; }
     public double getDestinationLat() { return destinationLat; }
     public void setDestinationLat(double destinationLat) { this.destinationLat = destinationLat; }
     public double getDestinationLng() { return destinationLng; }
     public void setDestinationLng(double destinationLng) { this.destinationLng = destinationLng; }
     public String getDestinationLabel() { return destinationLabel; }
     public void setDestinationLabel(String destinationLabel) { this.destinationLabel = destinationLabel; }
+    public String getDestinationFullAddress() { return destinationFullAddress; }
+    public void setDestinationFullAddress(String destinationFullAddress) { this.destinationFullAddress = destinationFullAddress; }
+    public String getDestinationPrivateLabel() { return destinationPrivateLabel; }
+    public void setDestinationPrivateLabel(String destinationPrivateLabel) { this.destinationPrivateLabel = destinationPrivateLabel; }
     public Instant getDepartAt() { return departAt; }
     public void setDepartAt(Instant departAt) { this.departAt = departAt; }
     public Instant getTripStartedAt() { return tripStartedAt; }

@@ -4,10 +4,13 @@ import com.alnlabs.ridebuddy.booking.BookingEntity;
 import com.alnlabs.ridebuddy.booking.BookingRepository;
 import com.alnlabs.ridebuddy.common.ApiException;
 import com.alnlabs.ridebuddy.common.GeoUtils;
+import com.alnlabs.ridebuddy.config.AppProperties;
 import com.alnlabs.ridebuddy.profile.ProfileService;
 import com.alnlabs.ridebuddy.ride.RideEntity;
 import com.alnlabs.ridebuddy.ride.RideRepository;
 import com.alnlabs.ridebuddy.ride.RideService;
+import com.alnlabs.ridebuddy.share.PostShareSupport;
+import com.alnlabs.ridebuddy.share.SharePayload;
 import jakarta.transaction.Transactional;
 import org.springframework.stereotype.Service;
 
@@ -30,6 +33,7 @@ public class RideRequestService {
     private final RideRepository rideRepo;
     private final BookingRepository bookingRepo;
     private final ProfileService profileService;
+    private final AppProperties appProperties;
 
     public RideRequestService(
             RideRequestRepository requestRepo,
@@ -37,7 +41,8 @@ public class RideRequestService {
             RideService rideService,
             RideRepository rideRepo,
             BookingRepository bookingRepo,
-            ProfileService profileService
+            ProfileService profileService,
+            AppProperties appProperties
     ) {
         this.requestRepo = requestRepo;
         this.offerRepo = offerRepo;
@@ -45,6 +50,7 @@ public class RideRequestService {
         this.rideRepo = rideRepo;
         this.bookingRepo = bookingRepo;
         this.profileService = profileService;
+        this.appProperties = appProperties;
     }
 
     @Transactional
@@ -68,21 +74,25 @@ public class RideRequestService {
         e.setRequesterId(requesterId);
         e.setOriginLat(req.originLat());
         e.setOriginLng(req.originLng());
-        e.setOriginLabel(req.originLabel() != null ? req.originLabel() : "Origin");
+        e.setOriginLabel(firstNonBlank(req.originPublicShort(), req.originLabel(), "Origin"));
+        e.setOriginFullAddress(blankToNull(req.originFullAddress()));
+        e.setOriginPrivateLabel(blankToNull(req.originPrivateLabel()));
         e.setDestinationLat(req.destinationLat());
         e.setDestinationLng(req.destinationLng());
-        e.setDestinationLabel(req.destinationLabel() != null ? req.destinationLabel() : "Destination");
+        e.setDestinationLabel(firstNonBlank(req.destinationPublicShort(), req.destinationLabel(), "Destination"));
+        e.setDestinationFullAddress(blankToNull(req.destinationFullAddress()));
+        e.setDestinationPrivateLabel(blankToNull(req.destinationPrivateLabel()));
         e.setDepartAt(req.departAt());
         e.setSeatsNeeded(seats);
         e.setComfortPreferred(Boolean.TRUE.equals(req.comfortPreferred()));
         e.setStatus("open");
         requestRepo.save(e);
-        return toResponse(e);
+        return toResponse(e, requesterId);
     }
 
     public List<RideRequestResponse> mine(UUID requesterId) {
         return requestRepo.findByRequesterIdOrderByDepartAtDesc(requesterId).stream()
-                .map(this::toResponse)
+                .map(e -> toResponse(e, requesterId))
                 .toList();
     }
 
@@ -98,7 +108,31 @@ public class RideRequestService {
                 throw ApiException.forbidden("Not allowed to view this request");
             }
         }
-        return toResponse(e);
+        return toResponse(e, viewerId);
+    }
+
+    public SharePayload share(UUID id) {
+        RideRequestEntity e = requestRepo.findById(id)
+                .orElseThrow(() -> ApiException.notFound("Ride request not found"));
+        if (!"open".equals(e.getStatus())) {
+            throw ApiException.badRequest("Only open seat requests can be shared");
+        }
+        String link = appProperties.share().needBaseUrl() + "/" + e.getId();
+        String deepLink = "ridebuddy:///ride/need/" + e.getId();
+        ProfileService.PosterCard poster = profileService.posterCard(e.getRequesterId());
+        return PostShareSupport.need(
+                e.getId(),
+                e.getOriginLabel(),
+                e.getOriginFullAddress(),
+                e.getDestinationLabel(),
+                e.getDestinationFullAddress(),
+                e.getDepartAt(),
+                e.getSeatsNeeded(),
+                e.isComfortPreferred(),
+                poster,
+                link,
+                deepLink
+        );
     }
 
     @Transactional
@@ -114,7 +148,7 @@ public class RideRequestService {
             offer.setStatus("cancelled");
             offerRepo.save(offer);
         }
-        return toResponse(e);
+        return toResponse(e, requesterId);
     }
 
     public List<RideService.RideResponse> matches(UUID viewerId, UUID requestId) {
@@ -185,7 +219,7 @@ public class RideRequestService {
             }
             if (best != null) {
                 boolean alreadyOffered = offerRepo.findByRequestIdAndRideId(req.getId(), best.getId()).isPresent();
-                items.add(new InboxItem(toResponse(req), best.getId(), bestScore, alreadyOffered));
+                items.add(new InboxItem(toResponse(req, ownerId), best.getId(), bestScore, alreadyOffered));
             }
         }
         items.sort(Comparator.comparing(InboxItem::detourKm));
@@ -351,16 +385,21 @@ public class RideRequestService {
         }
     }
 
-    private RideRequestResponse toResponse(RideRequestEntity e) {
+    private RideRequestResponse toResponse(RideRequestEntity e, UUID viewerId) {
+        boolean ownerView = viewerId != null && viewerId.equals(e.getRequesterId());
         return new RideRequestResponse(
                 e.getId(),
                 e.getRequesterId(),
                 e.getOriginLat(),
                 e.getOriginLng(),
                 e.getOriginLabel(),
+                e.getOriginFullAddress(),
+                ownerView ? e.getOriginPrivateLabel() : null,
                 e.getDestinationLat(),
                 e.getDestinationLng(),
                 e.getDestinationLabel(),
+                e.getDestinationFullAddress(),
+                ownerView ? e.getDestinationPrivateLabel() : null,
                 e.getDepartAt(),
                 e.getSeatsNeeded(),
                 e.isComfortPreferred(),
@@ -378,18 +417,36 @@ public class RideRequestService {
                 o.getRideId(),
                 o.getOwnerId(),
                 o.getStatus(),
-                req != null ? toResponse(req) : null,
-                rideService.get(ride.getId(), null)
+                req != null ? toResponse(req, o.getOwnerId()) : null,
+                rideService.get(ride.getId(), o.getOwnerId())
         );
+    }
+
+    private static String firstNonBlank(String... values) {
+        for (String v : values) {
+            if (v != null && !v.isBlank()) return v.trim();
+        }
+        return "Place";
+    }
+
+    private static String blankToNull(String value) {
+        if (value == null || value.isBlank()) return null;
+        return value.trim();
     }
 
     public record CreateRideRequestBody(
             Double originLat,
             Double originLng,
             String originLabel,
+            String originPublicShort,
+            String originFullAddress,
+            String originPrivateLabel,
             Double destinationLat,
             Double destinationLng,
             String destinationLabel,
+            String destinationPublicShort,
+            String destinationFullAddress,
+            String destinationPrivateLabel,
             Instant departAt,
             Integer seatsNeeded,
             Boolean comfortPreferred
@@ -403,9 +460,13 @@ public class RideRequestService {
             double originLat,
             double originLng,
             String originLabel,
+            String originFullAddress,
+            String originPrivateLabel,
             double destinationLat,
             double destinationLng,
             String destinationLabel,
+            String destinationFullAddress,
+            String destinationPrivateLabel,
             Instant departAt,
             int seatsNeeded,
             boolean comfortPreferred,

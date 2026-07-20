@@ -3,6 +3,8 @@ package com.alnlabs.ridebuddy.ride;
 import com.alnlabs.ridebuddy.common.ApiException;
 import com.alnlabs.ridebuddy.common.GeoUtils;
 import com.alnlabs.ridebuddy.config.AppProperties;
+import com.alnlabs.ridebuddy.share.PostShareSupport;
+import com.alnlabs.ridebuddy.share.SharePayload;
 import com.alnlabs.ridebuddy.profile.ProfileEntity;
 import com.alnlabs.ridebuddy.profile.ProfileRepository;
 import com.alnlabs.ridebuddy.profile.ProfileService;
@@ -14,15 +16,10 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.time.Instant;
-import java.time.ZoneId;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Locale;
 import java.util.UUID;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
@@ -32,10 +29,6 @@ public class RideService {
     private static final double DEFAULT_RADIUS_KM = 8.0;
     /** Local / commute trips only — destination must be within this of origin. */
     private static final double MAX_TRIP_KM = 100.0;
-
-    private static final ZoneId SHARE_ZONE = ZoneId.of("Asia/Kolkata");
-    private static final DateTimeFormatter SHARE_WHEN =
-            DateTimeFormatter.ofPattern("EEE, d MMM · h:mm a", Locale.ENGLISH);
 
     private final RideRepository rideRepo;
     private final VehicleService vehicleService;
@@ -101,10 +94,16 @@ public class RideService {
         }
         ride.setOriginLat(req.originLat());
         ride.setOriginLng(req.originLng());
-        ride.setOriginLabel(req.originLabel() != null ? req.originLabel() : "Origin");
+        String originPublic = firstNonBlank(req.originPublicShort(), req.originLabel(), "Origin");
+        ride.setOriginLabel(originPublic);
+        ride.setOriginFullAddress(blankToNull(req.originFullAddress()));
+        ride.setOriginPrivateLabel(blankToNull(req.originPrivateLabel()));
         ride.setDestinationLat(req.destinationLat());
         ride.setDestinationLng(req.destinationLng());
-        ride.setDestinationLabel(req.destinationLabel() != null ? req.destinationLabel() : "Destination");
+        String destPublic = firstNonBlank(req.destinationPublicShort(), req.destinationLabel(), "Destination");
+        ride.setDestinationLabel(destPublic);
+        ride.setDestinationFullAddress(blankToNull(req.destinationFullAddress()));
+        ride.setDestinationPrivateLabel(blankToNull(req.destinationPrivateLabel()));
         ride.setDepartAt(req.departAt());
         ride.setAvailableSeats(seats);
         ride.setPricePerSeat(req.pricePerSeat() != null ? req.pricePerSeat() : BigDecimal.ZERO);
@@ -121,19 +120,19 @@ public class RideService {
         rideRepo.save(ride);
 
         vehicle.setLastUsedAt(Instant.now());
-        return toResponse(ride, null, null);
+        return toResponse(ride, null, null, ownerId);
     }
 
     public List<RideResponse> myRides(UUID ownerId) {
         return rideRepo.findByOwnerIdOrderByDepartAtDesc(ownerId).stream()
-                .map(r -> toResponse(r, null, null))
+                .map(r -> toResponse(r, null, null, ownerId))
                 .toList();
     }
 
     public List<RideResponse> openOwned(UUID ownerId) {
         return rideRepo.findByOwnerIdAndStatusInOrderByDepartAtAsc(ownerId, List.of("open", "full"))
                 .stream()
-                .map(r -> toResponse(r, null, null))
+                .map(r -> toResponse(r, null, null, ownerId))
                 .toList();
     }
 
@@ -149,7 +148,7 @@ public class RideService {
                 detour = estimateDetourKm(profile, ride);
             }
         }
-        return toResponse(ride, match, detour);
+        return toResponse(ride, match, detour, viewerId);
     }
 
     @Transactional
@@ -164,7 +163,7 @@ public class RideService {
         }
         ride.setStatus("cancelled");
         rideRepo.save(ride);
-        return toResponse(ride, null, null);
+        return toResponse(ride, null, null, ownerId);
     }
 
     public List<RideResponse> search(UUID viewerId, SearchRequest req) {
@@ -196,7 +195,7 @@ public class RideService {
                 continue;
             }
             double score = originDist + destDist;
-            RideResponse response = toResponse(ride, match, score);
+            RideResponse response = toResponse(ride, match, score, viewerId);
             results.add(response);
         }
         boolean preferComfort = Boolean.TRUE.equals(req.comfortOnly());
@@ -209,10 +208,6 @@ public class RideService {
     public SharePayload share(UUID rideId) {
         RideEntity ride = rideRepo.findById(rideId)
                 .orElseThrow(() -> ApiException.notFound("Ride not found"));
-        ProfileEntity owner = profileRepo.findById(ride.getOwnerId()).orElse(null);
-        String ownerName = owner != null && owner.getDisplayName() != null && !owner.getDisplayName().isBlank()
-                ? owner.getDisplayName().trim()
-                : "a Ride Buddy";
 
         VehicleEntity vehicle = vehicleRepo.findById(ride.getVehicleId()).orElse(null);
         String vehicleLine = null;
@@ -226,76 +221,27 @@ public class RideService {
             vehicleLine = color + name;
         }
 
-        String when = SHARE_WHEN.format(ride.getDepartAt().atZone(SHARE_ZONE));
-        String from = shortPlace(ride.getOriginLabel());
-        String to = shortPlace(ride.getDestinationLabel());
-        String price = ride.getPricePerSeat().stripTrailingZeros().toPlainString();
         String link = appProperties.share().rideBaseUrl() + "/" + ride.getId();
-
-        StringBuilder tripMeta = new StringBuilder();
-        if (ride.getRouteDistanceM() != null && ride.getRouteDistanceM() > 0) {
-            double km = ride.getRouteDistanceM() / 1000.0;
-            String kmLabel = km >= 10
-                    ? String.format(Locale.ENGLISH, "%.0f km", km)
-                    : String.format(Locale.ENGLISH, "%.1f km", km);
-            tripMeta.append(kmLabel);
-        }
-        if (ride.getRouteDurationS() != null && ride.getRouteDurationS() > 0) {
-            int mins = (int) Math.round(ride.getRouteDurationS() / 60.0);
-            String dur = mins < 60 ? mins + " min" : (mins / 60) + "h " + (mins % 60) + "m";
-            if (tripMeta.length() > 0) {
-                tripMeta.append(" · ");
-            }
-            tripMeta.append(dur);
-        }
-
-        StringBuilder text = new StringBuilder();
-        text.append("*Ride Buddy — seat available*\n");
-        text.append("Office carpool · share cost with the host (cash)\n");
-        text.append("Not a taxi — co-ride together\n\n");
-        text.append("*From:* ").append(from).append('\n');
-        text.append("*To:* ").append(to).append('\n');
-        text.append("*When:* ").append(when).append(" IST\n");
-        text.append("*Seats:* ").append(ride.getAvailableSeats()).append('\n');
-        text.append("*Share:* ₹").append(price).append(" / seat\n");
-        if (tripMeta.length() > 0) {
-            text.append("*Route:* ").append(tripMeta).append('\n');
-        }
-        if (vehicleLine != null) {
-            text.append("*Car:* ").append(vehicleLine).append('\n');
-        }
-        if (ride.isComfortRide()) {
-            text.append("*Comfort:* max 2 in back\n");
-        }
-        text.append("\nHosted by *").append(ownerName).append("*\n");
+        String deepLink = "ridebuddy:///ride/detail/" + ride.getId();
         ProfileService.PosterCard poster = profileService.posterCard(ride.getOwnerId());
-        if (poster.jobRole() != null || poster.company() != null) {
-            String roleLine = Stream.of(poster.jobRole(), poster.company())
-                    .filter(s -> s != null && !s.isBlank())
-                    .collect(Collectors.joining(" · "));
-            if (!roleLine.isBlank()) {
-                text.append(roleLine).append('\n');
-            }
-        }
-        if (poster.topInterests() != null && !poster.topInterests().isEmpty()) {
-            text.append("Into: ").append(String.join(", ", poster.topInterests())).append('\n');
-        }
-        text.append("Open in Ride Buddy:\n").append(link);
 
-        return new SharePayload(ride.getId(), text.toString().trim(), link);
-    }
-
-    /** Keep WhatsApp messages readable — Nominatim labels can be very long. */
-    private static String shortPlace(String label) {
-        if (label == null || label.isBlank()) {
-            return "Unknown";
-        }
-        String[] parts = label.split(",");
-        return Stream.of(parts)
-                .map(String::trim)
-                .filter(s -> !s.isEmpty())
-                .limit(3)
-                .collect(Collectors.joining(", "));
+        return PostShareSupport.ride(
+                ride.getId(),
+                ride.getOriginLabel(),
+                ride.getOriginFullAddress(),
+                ride.getDestinationLabel(),
+                ride.getDestinationFullAddress(),
+                ride.getDepartAt(),
+                ride.getAvailableSeats(),
+                ride.getPricePerSeat(),
+                ride.isComfortRide(),
+                vehicleLine,
+                ride.getRouteDistanceM(),
+                ride.getRouteDurationS(),
+                poster,
+                link,
+                deepLink
+        );
     }
 
     public RideEntity require(UUID rideId) {
@@ -351,7 +297,7 @@ public class RideService {
         return a + b;
     }
 
-    private RideResponse toResponse(RideEntity r, String matchType, Double detourKm) {
+    private RideResponse toResponse(RideEntity r, String matchType, Double detourKm, UUID viewerId) {
         Object geometry = null;
         if (r.getRouteGeometry() != null && !r.getRouteGeometry().isBlank()) {
             try {
@@ -360,6 +306,7 @@ public class RideService {
                 geometry = r.getRouteGeometry();
             }
         }
+        boolean ownerView = viewerId != null && viewerId.equals(r.getOwnerId());
         return new RideResponse(
                 r.getId(),
                 r.getOwnerId(),
@@ -370,9 +317,13 @@ public class RideService {
                 r.getOriginLat(),
                 r.getOriginLng(),
                 r.getOriginLabel(),
+                r.getOriginFullAddress(),
+                ownerView ? r.getOriginPrivateLabel() : null,
                 r.getDestinationLat(),
                 r.getDestinationLng(),
                 r.getDestinationLabel(),
+                r.getDestinationFullAddress(),
+                ownerView ? r.getDestinationPrivateLabel() : null,
                 r.getDepartAt(),
                 r.getAvailableSeats(),
                 r.getPricePerSeat(),
@@ -386,6 +337,18 @@ public class RideService {
         );
     }
 
+    private static String firstNonBlank(String... values) {
+        for (String v : values) {
+            if (v != null && !v.isBlank()) return v.trim();
+        }
+        return "Place";
+    }
+
+    private static String blankToNull(String value) {
+        if (value == null || value.isBlank()) return null;
+        return value.trim();
+    }
+
     public record CreateRideRequest(
             UUID vehicleId,
             String rideType,
@@ -393,9 +356,15 @@ public class RideService {
             Double originLat,
             Double originLng,
             String originLabel,
+            String originPublicShort,
+            String originFullAddress,
+            String originPrivateLabel,
             Double destinationLat,
             Double destinationLng,
             String destinationLabel,
+            String destinationPublicShort,
+            String destinationFullAddress,
+            String destinationPrivateLabel,
             Instant departAt,
             Integer availableSeats,
             BigDecimal pricePerSeat,
@@ -425,9 +394,13 @@ public class RideService {
             double originLat,
             double originLng,
             String originLabel,
+            String originFullAddress,
+            String originPrivateLabel,
             double destinationLat,
             double destinationLng,
             String destinationLabel,
+            String destinationFullAddress,
+            String destinationPrivateLabel,
             Instant departAt,
             int availableSeats,
             BigDecimal pricePerSeat,
@@ -439,6 +412,4 @@ public class RideService {
             Double routeDurationS,
             ProfileService.PosterCard poster
     ) {}
-
-    public record SharePayload(UUID rideId, String text, String link) {}
 }

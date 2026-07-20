@@ -92,6 +92,20 @@ flowchart TB
 - App version check endpoint
 - Account delete + anonymize
 
+### Feature 4: Rider Podcast
+- Episode catalog (title, description, audio URL or external link, duration, publish time)
+- Optional tags (commute, safety, product tips)
+- Admin/CMS-style create/update later; v1 can be SQL-seeded or simple CRUD for ops
+
+### Feature 5: App-open tips & suggestions
+- Tip/suggestion records (title, body, CTA optional, audience rules, priority, active window)
+- Per-user “seen / dismissed” so the same tip is not spammed
+- Endpoint: next tip(s) for this user on app open
+
+### Places / address labels (enhancement)
+- Multi home & multi office (`user_places`) with private labels
+- Rides/needs store public short + full address; private labels returned only to owner
+
 ---
 
 ## Terminology (API DTOs & docs)
@@ -240,6 +254,13 @@ services:
 | **11** | Meetups + Connect Engine |
 | **12** | Credits wallet + ledger |
 | **13** | Job referrals + payout redemption |
+| **14** | Rider Podcast — episodes API, optional audio hosting metadata |
+| **15** | App tips — tips CRUD/list, `GET /tips/next`, per-user dismiss/seen |
+
+### Address / places enhancement (when prioritized)
+
+- `user_places` migration + CRUD; sync primary home/office on profile
+- Ride/need label fields: public short + full address; private labels owner-only in responses
 
 ---
 

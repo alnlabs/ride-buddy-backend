@@ -13,4 +13,8 @@ public interface RideRequestRepository extends JpaRepository<RideRequestEntity, 
     List<RideRequestEntity> findByStatusAndDepartAtAfterOrderByDepartAtAsc(String status, Instant after);
 
     Optional<RideRequestEntity> findByIdAndRequesterId(UUID id, UUID requesterId);
+
+    List<RideRequestEntity> findByStatusAndExpiresAtBefore(String status, Instant before);
+
+    boolean existsByScheduleIdAndOccurrenceDate(UUID scheduleId, java.time.LocalDate occurrenceDate);
 }

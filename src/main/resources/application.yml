@@ -42,6 +42,8 @@ app:
     refresh-token-days: 30
   cors:
     allowed-origins: ${APP_CORS_ORIGINS:*}
+  # Server-side Google Maps key for live-traffic Routes API (not Android-app-restricted).
+  google-maps-api-key: ${GOOGLE_MAPS_API_KEY:}
   share:
     ride-base-url: ${APP_SHARE_RIDE_BASE_URL:https://ridebuddy.alnlabs.com/r}
     need-base-url: ${APP_SHARE_NEED_BASE_URL:https://ridebuddy.alnlabs.com/n}

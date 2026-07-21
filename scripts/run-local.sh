@@ -104,4 +104,13 @@ export DB_HOST DB_PORT DB_NAME DB_USER DB_PASSWORD SERVER_PORT
 export APP_AUTH_MOCK_OTP="${APP_AUTH_MOCK_OTP:-true}"
 export JWT_SECRET="${JWT_SECRET:-ride-buddy-dev-secret-key-must-be-at-least-32-chars-long}"
 
+# Load optional .env (Google Maps key for live-traffic routes, share URLs, etc.)
+if [[ -f "$ROOT_DIR/.env" ]]; then
+  set -a
+  # shellcheck disable=SC1091
+  source "$ROOT_DIR/.env"
+  set +a
+fi
+export GOOGLE_MAPS_API_KEY="${GOOGLE_MAPS_API_KEY:-}"
+
 exec mvn spring-boot:run -Dspring-boot.run.jvmArguments="-Dserver.port=${SERVER_PORT}"

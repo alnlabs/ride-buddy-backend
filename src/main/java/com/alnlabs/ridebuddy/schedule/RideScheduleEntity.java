@@ -1,4 +1,4 @@
-package com.alnlabs.ridebuddy.ride;
+package com.alnlabs.ridebuddy.schedule;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -9,11 +9,12 @@ import jakarta.persistence.Table;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalTime;
 import java.util.UUID;
 
 @Entity
-@Table(name = "rides")
-public class RideEntity {
+@Table(name = "ride_schedules")
+public class RideScheduleEntity {
 
     @Id
     private UUID id;
@@ -21,20 +22,44 @@ public class RideEntity {
     @Column(name = "owner_id", nullable = false)
     private UUID ownerId;
 
-    @Column(name = "vehicle_id", nullable = false)
-    private UUID vehicleId;
-
-    @Column(name = "ride_type", nullable = false)
-    private String rideType = "scheduled";
+    @Column(nullable = false)
+    private String kind;
 
     @Column(nullable = false)
-    private String status = "open";
+    private String frequency;
+
+    @Column(name = "days_of_week")
+    private String daysOfWeek;
+
+    @Column(name = "day_of_month")
+    private Integer dayOfMonth;
+
+    @Column(name = "depart_local_time", nullable = false)
+    private LocalTime departLocalTime;
+
+    @Column(nullable = false)
+    private String timezone = "Asia/Kolkata";
+
+    @Column(nullable = false)
+    private boolean active = true;
+
+    @Column(name = "vehicle_id")
+    private UUID vehicleId;
+
+    @Column(name = "available_seats")
+    private Integer availableSeats;
+
+    @Column(name = "price_per_seat")
+    private BigDecimal pricePerSeat = BigDecimal.ZERO;
 
     @Column(name = "is_comfort_ride", nullable = false)
     private boolean comfortRide;
 
-    @Column(name = "max_back_seat_passengers")
-    private Integer maxBackSeatPassengers;
+    @Column(name = "seats_needed")
+    private Integer seatsNeeded;
+
+    @Column(name = "comfort_preferred", nullable = false)
+    private boolean comfortPreferred;
 
     @Column(name = "origin_lat", nullable = false)
     private double originLat;
@@ -66,40 +91,6 @@ public class RideEntity {
     @Column(name = "destination_private_label")
     private String destinationPrivateLabel;
 
-    @Column(name = "depart_at", nullable = false)
-    private Instant departAt;
-
-    @Column(name = "trip_started_at")
-    private Instant tripStartedAt;
-
-    @Column(name = "available_seats", nullable = false)
-    private int availableSeats;
-
-    @Column(name = "price_per_seat", nullable = false)
-    private BigDecimal pricePerSeat = BigDecimal.ZERO;
-
-    @Column(name = "is_recurring", nullable = false)
-    private boolean recurring;
-
-    @Column(name = "expires_at")
-    private Instant expiresAt;
-
-    @Column(name = "schedule_id")
-    private UUID scheduleId;
-
-    @Column(name = "occurrence_date")
-    private java.time.LocalDate occurrenceDate;
-
-    /** JSON array of [lat,lng] points for the owner-selected path. */
-    @Column(name = "route_geometry", columnDefinition = "TEXT")
-    private String routeGeometry;
-
-    @Column(name = "route_distance_m")
-    private Double routeDistanceM;
-
-    @Column(name = "route_duration_s")
-    private Double routeDurationS;
-
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
@@ -108,9 +99,7 @@ public class RideEntity {
 
     @PrePersist
     void onCreate() {
-        if (id == null) {
-            id = UUID.randomUUID();
-        }
+        if (id == null) id = UUID.randomUUID();
         Instant now = Instant.now();
         createdAt = now;
         updatedAt = now;
@@ -124,16 +113,32 @@ public class RideEntity {
     public UUID getId() { return id; }
     public UUID getOwnerId() { return ownerId; }
     public void setOwnerId(UUID ownerId) { this.ownerId = ownerId; }
+    public String getKind() { return kind; }
+    public void setKind(String kind) { this.kind = kind; }
+    public String getFrequency() { return frequency; }
+    public void setFrequency(String frequency) { this.frequency = frequency; }
+    public String getDaysOfWeek() { return daysOfWeek; }
+    public void setDaysOfWeek(String daysOfWeek) { this.daysOfWeek = daysOfWeek; }
+    public Integer getDayOfMonth() { return dayOfMonth; }
+    public void setDayOfMonth(Integer dayOfMonth) { this.dayOfMonth = dayOfMonth; }
+    public LocalTime getDepartLocalTime() { return departLocalTime; }
+    public void setDepartLocalTime(LocalTime departLocalTime) { this.departLocalTime = departLocalTime; }
+    public String getTimezone() { return timezone; }
+    public void setTimezone(String timezone) { this.timezone = timezone; }
+    public boolean isActive() { return active; }
+    public void setActive(boolean active) { this.active = active; }
     public UUID getVehicleId() { return vehicleId; }
     public void setVehicleId(UUID vehicleId) { this.vehicleId = vehicleId; }
-    public String getRideType() { return rideType; }
-    public void setRideType(String rideType) { this.rideType = rideType; }
-    public String getStatus() { return status; }
-    public void setStatus(String status) { this.status = status; }
+    public Integer getAvailableSeats() { return availableSeats; }
+    public void setAvailableSeats(Integer availableSeats) { this.availableSeats = availableSeats; }
+    public BigDecimal getPricePerSeat() { return pricePerSeat; }
+    public void setPricePerSeat(BigDecimal pricePerSeat) { this.pricePerSeat = pricePerSeat; }
     public boolean isComfortRide() { return comfortRide; }
     public void setComfortRide(boolean comfortRide) { this.comfortRide = comfortRide; }
-    public Integer getMaxBackSeatPassengers() { return maxBackSeatPassengers; }
-    public void setMaxBackSeatPassengers(Integer maxBackSeatPassengers) { this.maxBackSeatPassengers = maxBackSeatPassengers; }
+    public Integer getSeatsNeeded() { return seatsNeeded; }
+    public void setSeatsNeeded(Integer seatsNeeded) { this.seatsNeeded = seatsNeeded; }
+    public boolean isComfortPreferred() { return comfortPreferred; }
+    public void setComfortPreferred(boolean comfortPreferred) { this.comfortPreferred = comfortPreferred; }
     public double getOriginLat() { return originLat; }
     public void setOriginLat(double originLat) { this.originLat = originLat; }
     public double getOriginLng() { return originLng; }
@@ -154,26 +159,4 @@ public class RideEntity {
     public void setDestinationFullAddress(String destinationFullAddress) { this.destinationFullAddress = destinationFullAddress; }
     public String getDestinationPrivateLabel() { return destinationPrivateLabel; }
     public void setDestinationPrivateLabel(String destinationPrivateLabel) { this.destinationPrivateLabel = destinationPrivateLabel; }
-    public Instant getDepartAt() { return departAt; }
-    public void setDepartAt(Instant departAt) { this.departAt = departAt; }
-    public Instant getTripStartedAt() { return tripStartedAt; }
-    public void setTripStartedAt(Instant tripStartedAt) { this.tripStartedAt = tripStartedAt; }
-    public int getAvailableSeats() { return availableSeats; }
-    public void setAvailableSeats(int availableSeats) { this.availableSeats = availableSeats; }
-    public BigDecimal getPricePerSeat() { return pricePerSeat; }
-    public void setPricePerSeat(BigDecimal pricePerSeat) { this.pricePerSeat = pricePerSeat; }
-    public boolean isRecurring() { return recurring; }
-    public void setRecurring(boolean recurring) { this.recurring = recurring; }
-    public Instant getExpiresAt() { return expiresAt; }
-    public void setExpiresAt(Instant expiresAt) { this.expiresAt = expiresAt; }
-    public UUID getScheduleId() { return scheduleId; }
-    public void setScheduleId(UUID scheduleId) { this.scheduleId = scheduleId; }
-    public java.time.LocalDate getOccurrenceDate() { return occurrenceDate; }
-    public void setOccurrenceDate(java.time.LocalDate occurrenceDate) { this.occurrenceDate = occurrenceDate; }
-    public String getRouteGeometry() { return routeGeometry; }
-    public void setRouteGeometry(String routeGeometry) { this.routeGeometry = routeGeometry; }
-    public Double getRouteDistanceM() { return routeDistanceM; }
-    public void setRouteDistanceM(Double routeDistanceM) { this.routeDistanceM = routeDistanceM; }
-    public Double getRouteDurationS() { return routeDurationS; }
-    public void setRouteDurationS(Double routeDurationS) { this.routeDurationS = routeDurationS; }
 }

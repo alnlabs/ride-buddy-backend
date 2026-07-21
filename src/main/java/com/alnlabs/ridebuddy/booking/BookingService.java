@@ -1,5 +1,6 @@
 package com.alnlabs.ridebuddy.booking;
 
+import com.alnlabs.ridebuddy.chat.ChatService;
 import com.alnlabs.ridebuddy.common.ApiException;
 import com.alnlabs.ridebuddy.request.RideRequestService;
 import com.alnlabs.ridebuddy.ride.RideEntity;
@@ -18,15 +19,18 @@ public class BookingService {
     private final BookingRepository bookingRepo;
     private final RideService rideService;
     private final RideRequestService rideRequestService;
+    private final ChatService chatService;
 
     public BookingService(
             BookingRepository bookingRepo,
             RideService rideService,
-            @Lazy RideRequestService rideRequestService
+            @Lazy RideRequestService rideRequestService,
+            @Lazy ChatService chatService
     ) {
         this.bookingRepo = bookingRepo;
         this.rideService = rideService;
         this.rideRequestService = rideRequestService;
+        this.chatService = chatService;
     }
 
     @Transactional
@@ -60,6 +64,7 @@ public class BookingService {
         b.setDropLng(req.dropLng());
         b.setDropLabel(req.dropLabel());
         bookingRepo.save(b);
+        chatService.ensureForBooking(b);
         return toResponse(b, ride);
     }
 

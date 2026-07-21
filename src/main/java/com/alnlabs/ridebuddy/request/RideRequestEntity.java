@@ -68,6 +68,18 @@ public class RideRequestEntity {
     @Column(name = "matched_booking_id")
     private UUID matchedBookingId;
 
+    @Column(name = "expires_at")
+    private Instant expiresAt;
+
+    @Column(name = "schedule_id")
+    private UUID scheduleId;
+
+    @Column(name = "occurrence_date")
+    private java.time.LocalDate occurrenceDate;
+
+    @Column(name = "is_recurring", nullable = false)
+    private boolean recurring;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
@@ -122,4 +134,12 @@ public class RideRequestEntity {
     public void setMatchedRideId(UUID matchedRideId) { this.matchedRideId = matchedRideId; }
     public UUID getMatchedBookingId() { return matchedBookingId; }
     public void setMatchedBookingId(UUID matchedBookingId) { this.matchedBookingId = matchedBookingId; }
+    public Instant getExpiresAt() { return expiresAt; }
+    public void setExpiresAt(Instant expiresAt) { this.expiresAt = expiresAt; }
+    public UUID getScheduleId() { return scheduleId; }
+    public void setScheduleId(UUID scheduleId) { this.scheduleId = scheduleId; }
+    public java.time.LocalDate getOccurrenceDate() { return occurrenceDate; }
+    public void setOccurrenceDate(java.time.LocalDate occurrenceDate) { this.occurrenceDate = occurrenceDate; }
+    public boolean isRecurring() { return recurring; }
+    public void setRecurring(boolean recurring) { this.recurring = recurring; }
 }

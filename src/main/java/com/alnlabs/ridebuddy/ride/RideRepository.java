@@ -10,4 +10,6 @@ public interface RideRepository extends JpaRepository<RideEntity, UUID> {
     List<RideEntity> findByOwnerIdOrderByDepartAtDesc(UUID ownerId);
     List<RideEntity> findByOwnerIdAndStatusInOrderByDepartAtAsc(UUID ownerId, List<String> statuses);
     List<RideEntity> findByStatusAndDepartAtAfterOrderByDepartAtAsc(String status, Instant after);
+    List<RideEntity> findByStatusInAndExpiresAtBefore(List<String> statuses, Instant before);
+    boolean existsByScheduleIdAndOccurrenceDate(UUID scheduleId, java.time.LocalDate occurrenceDate);
 }

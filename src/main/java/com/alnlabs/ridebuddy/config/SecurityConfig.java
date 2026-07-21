@@ -47,7 +47,11 @@ public class SecurityConfig {
                                 "/swagger-ui/**",
                                 "/api-docs",
                                 "/api-docs/**",
-                                "/v3/api-docs/**"
+                                "/v3/api-docs/**",
+                                "/ws",
+                                "/ws/**",
+                                "/ws-native",
+                                "/ws-native/**"
                         ).permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/rides/*/share").permitAll()

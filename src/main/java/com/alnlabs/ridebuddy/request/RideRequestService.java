@@ -2,7 +2,9 @@ package com.alnlabs.ridebuddy.request;
 
 import com.alnlabs.ridebuddy.booking.BookingEntity;
 import com.alnlabs.ridebuddy.booking.BookingRepository;
+import com.alnlabs.ridebuddy.chat.ChatService;
 import com.alnlabs.ridebuddy.common.ApiException;
+import com.alnlabs.ridebuddy.common.DepartWindow;
 import com.alnlabs.ridebuddy.common.GeoUtils;
 import com.alnlabs.ridebuddy.config.AppProperties;
 import com.alnlabs.ridebuddy.profile.ProfileService;
@@ -12,6 +14,7 @@ import com.alnlabs.ridebuddy.ride.RideService;
 import com.alnlabs.ridebuddy.share.PostShareSupport;
 import com.alnlabs.ridebuddy.share.SharePayload;
 import jakarta.transaction.Transactional;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -34,6 +37,7 @@ public class RideRequestService {
     private final BookingRepository bookingRepo;
     private final ProfileService profileService;
     private final AppProperties appProperties;
+    private final ChatService chatService;
 
     public RideRequestService(
             RideRequestRepository requestRepo,
@@ -42,7 +46,8 @@ public class RideRequestService {
             RideRepository rideRepo,
             BookingRepository bookingRepo,
             ProfileService profileService,
-            AppProperties appProperties
+            AppProperties appProperties,
+            @Lazy ChatService chatService
     ) {
         this.requestRepo = requestRepo;
         this.offerRepo = offerRepo;
@@ -51,6 +56,7 @@ public class RideRequestService {
         this.bookingRepo = bookingRepo;
         this.profileService = profileService;
         this.appProperties = appProperties;
+        this.chatService = chatService;
     }
 
     @Transactional
@@ -65,6 +71,7 @@ public class RideRequestService {
         if (req.departAt() == null) {
             throw ApiException.badRequest("departAt is required");
         }
+        DepartWindow.requireUpcomingWithinDay(req.departAt());
         int seats = req.seatsNeeded() != null ? req.seatsNeeded() : 1;
         if (seats < 1 || seats > 3) {
             throw ApiException.badRequest("seatsNeeded must be 1–3");
@@ -83,11 +90,58 @@ public class RideRequestService {
         e.setDestinationFullAddress(blankToNull(req.destinationFullAddress()));
         e.setDestinationPrivateLabel(blankToNull(req.destinationPrivateLabel()));
         e.setDepartAt(req.departAt());
+        e.setExpiresAt(DepartWindow.expiresAt(req.departAt()));
         e.setSeatsNeeded(seats);
         e.setComfortPreferred(Boolean.TRUE.equals(req.comfortPreferred()));
         e.setStatus("open");
         requestRepo.save(e);
         return toResponse(e, requesterId);
+    }
+
+    @Transactional
+    public RideRequestEntity materializeScheduled(
+            UUID requesterId,
+            UUID scheduleId,
+            java.time.LocalDate occurrenceDate,
+            Instant departAt,
+            int seatsNeeded,
+            boolean comfortPreferred,
+            double originLat,
+            double originLng,
+            String originLabel,
+            String originFullAddress,
+            String originPrivateLabel,
+            double destinationLat,
+            double destinationLng,
+            String destinationLabel,
+            String destinationFullAddress,
+            String destinationPrivateLabel
+    ) {
+        if (requestRepo.existsByScheduleIdAndOccurrenceDate(scheduleId, occurrenceDate)) {
+            return null;
+        }
+        RideRequestEntity e = new RideRequestEntity();
+        e.setRequesterId(requesterId);
+        e.setOriginLat(originLat);
+        e.setOriginLng(originLng);
+        e.setOriginLabel(originLabel);
+        e.setOriginFullAddress(originFullAddress);
+        e.setOriginPrivateLabel(originPrivateLabel);
+        e.setDestinationLat(destinationLat);
+        e.setDestinationLng(destinationLng);
+        e.setDestinationLabel(destinationLabel);
+        e.setDestinationFullAddress(destinationFullAddress);
+        e.setDestinationPrivateLabel(destinationPrivateLabel);
+        e.setDepartAt(departAt);
+        e.setExpiresAt(DepartWindow.expiresAt(departAt));
+        e.setSeatsNeeded(seatsNeeded);
+        e.setComfortPreferred(comfortPreferred);
+        e.setStatus("open");
+        e.setRecurring(true);
+        e.setScheduleId(scheduleId);
+        e.setOccurrenceDate(occurrenceDate);
+        requestRepo.save(e);
+        return e;
     }
 
     public List<RideRequestResponse> mine(UUID requesterId) {
@@ -179,7 +233,7 @@ public class RideRequestService {
             return List.of();
         }
         List<RideRequestEntity> openReqs = requestRepo.findByStatusAndDepartAtAfterOrderByDepartAtAsc(
-                "open", Instant.now().minusSeconds(3600));
+                "open", Instant.now());
 
         List<InboxItem> items = new ArrayList<>();
         for (RideRequestEntity req : openReqs) {
@@ -226,6 +280,52 @@ public class RideRequestService {
         return items;
     }
 
+    /** Open co-rider requests that match one of the host’s rides. */
+    public List<InboxItem> matchingNeedsForRide(UUID ownerId, UUID rideId) {
+        RideEntity ride = rideService.require(rideId);
+        if (!ride.getOwnerId().equals(ownerId)) {
+            throw ApiException.forbidden("Not your ride");
+        }
+        if (!"open".equals(ride.getStatus()) || ride.getAvailableSeats() <= 0) {
+            return List.of();
+        }
+        if (!GeoUtils.withinKm(
+                ride.getOriginLat(), ride.getOriginLng(),
+                ride.getDestinationLat(), ride.getDestinationLng(),
+                MAX_TRIP_KM)) {
+            return List.of();
+        }
+
+        List<RideRequestEntity> openReqs = requestRepo.findByStatusAndDepartAtAfterOrderByDepartAtAsc(
+                "open", Instant.now());
+        List<InboxItem> items = new ArrayList<>();
+        for (RideRequestEntity req : openReqs) {
+            if (req.getRequesterId().equals(ownerId)) {
+                continue;
+            }
+            if (ride.getAvailableSeats() < req.getSeatsNeeded()) {
+                continue;
+            }
+            double o = GeoUtils.distanceKm(
+                    req.getOriginLat(), req.getOriginLng(),
+                    ride.getOriginLat(), ride.getOriginLng());
+            double d = GeoUtils.distanceKm(
+                    req.getDestinationLat(), req.getDestinationLng(),
+                    ride.getDestinationLat(), ride.getDestinationLng());
+            if (o > DEFAULT_RADIUS_KM && d > DEFAULT_RADIUS_KM) {
+                continue;
+            }
+            double score = o + d;
+            if (req.isComfortPreferred() && !ride.isComfortRide()) {
+                score += 2.5;
+            }
+            boolean alreadyOffered = offerRepo.findByRequestIdAndRideId(req.getId(), ride.getId()).isPresent();
+            items.add(new InboxItem(toResponse(req, ownerId), ride.getId(), score, alreadyOffered));
+        }
+        items.sort(Comparator.comparing(InboxItem::detourKm));
+        return items;
+    }
+
     @Transactional
     public RideOfferResponse offer(UUID ownerId, CreateOfferBody body) {
         RideRequestEntity req = requestRepo.findById(body.requestId())
@@ -256,6 +356,7 @@ public class RideRequestService {
         offer.setOwnerId(ownerId);
         offer.setStatus("offered");
         offerRepo.save(offer);
+        chatService.ensureForOffer(offer, ride, req);
         return toOfferResponse(offer, req, ride);
     }
 
@@ -349,6 +450,8 @@ public class RideRequestService {
         req.setMatchedBookingId(booking.getId());
         requestRepo.save(req);
 
+        chatService.attachBooking(ride.getId(), requesterId, booking.getId());
+
         for (RideOfferEntity other : offerRepo.findByRequestIdAndStatus(req.getId(), "offered")) {
             other.setStatus("cancelled");
             offerRepo.save(other);
@@ -401,9 +504,12 @@ public class RideRequestService {
                 e.getDestinationFullAddress(),
                 ownerView ? e.getDestinationPrivateLabel() : null,
                 e.getDepartAt(),
+                e.getExpiresAt(),
                 e.getSeatsNeeded(),
                 e.isComfortPreferred(),
                 e.getStatus(),
+                e.isRecurring(),
+                e.getScheduleId(),
                 e.getMatchedRideId(),
                 e.getMatchedBookingId(),
                 profileService.posterCard(e.getRequesterId())
@@ -468,9 +574,12 @@ public class RideRequestService {
             String destinationFullAddress,
             String destinationPrivateLabel,
             Instant departAt,
+            Instant expiresAt,
             int seatsNeeded,
             boolean comfortPreferred,
             String status,
+            boolean recurring,
+            UUID scheduleId,
             UUID matchedRideId,
             UUID matchedBookingId,
             ProfileService.PosterCard poster

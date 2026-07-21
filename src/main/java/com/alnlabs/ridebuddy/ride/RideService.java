@@ -1,6 +1,7 @@
 package com.alnlabs.ridebuddy.ride;
 
 import com.alnlabs.ridebuddy.common.ApiException;
+import com.alnlabs.ridebuddy.common.DepartWindow;
 import com.alnlabs.ridebuddy.common.GeoUtils;
 import com.alnlabs.ridebuddy.config.AppProperties;
 import com.alnlabs.ridebuddy.share.PostShareSupport;
@@ -80,6 +81,7 @@ public class RideService {
         if (req.departAt() == null) {
             throw ApiException.badRequest("departAt is required");
         }
+        DepartWindow.requireUpcomingWithinDay(req.departAt());
 
         RideEntity ride = new RideEntity();
         ride.setOwnerId(ownerId);
@@ -105,6 +107,7 @@ public class RideService {
         ride.setDestinationFullAddress(blankToNull(req.destinationFullAddress()));
         ride.setDestinationPrivateLabel(blankToNull(req.destinationPrivateLabel()));
         ride.setDepartAt(req.departAt());
+        ride.setExpiresAt(DepartWindow.expiresAt(req.departAt()));
         ride.setAvailableSeats(seats);
         ride.setPricePerSeat(req.pricePerSeat() != null ? req.pricePerSeat() : BigDecimal.ZERO);
         ride.setRecurring(Boolean.TRUE.equals(req.recurring()));
@@ -123,6 +126,66 @@ public class RideService {
         return toResponse(ride, null, null, ownerId);
     }
 
+    /** Materialize a scheduled occurrence (skips depart-window create checks; caller sets departAt). */
+    @Transactional
+    public RideEntity materializeScheduled(
+            UUID ownerId,
+            UUID vehicleId,
+            UUID scheduleId,
+            java.time.LocalDate occurrenceDate,
+            Instant departAt,
+            boolean comfortRide,
+            Integer availableSeats,
+            BigDecimal pricePerSeat,
+            double originLat,
+            double originLng,
+            String originLabel,
+            String originFullAddress,
+            String originPrivateLabel,
+            double destinationLat,
+            double destinationLng,
+            String destinationLabel,
+            String destinationFullAddress,
+            String destinationPrivateLabel
+    ) {
+        if (rideRepo.existsByScheduleIdAndOccurrenceDate(scheduleId, occurrenceDate)) {
+            return null;
+        }
+        VehicleEntity vehicle = vehicleService.requireOwnedActive(ownerId, vehicleId);
+        int seats = availableSeats != null ? availableSeats : Math.max(1, vehicle.getSeats() - 1);
+        if (comfortRide) {
+            seats = Math.min(seats, 2);
+        } else {
+            seats = Math.min(seats, Math.min(3, Math.max(1, vehicle.getSeats() - 1)));
+        }
+        RideEntity ride = new RideEntity();
+        ride.setOwnerId(ownerId);
+        ride.setVehicleId(vehicle.getId());
+        ride.setRideType("scheduled");
+        ride.setStatus("open");
+        ride.setComfortRide(comfortRide);
+        ride.setMaxBackSeatPassengers(comfortRide ? 2 : Math.min(3, Math.max(1, vehicle.getSeats() - 1)));
+        ride.setOriginLat(originLat);
+        ride.setOriginLng(originLng);
+        ride.setOriginLabel(originLabel);
+        ride.setOriginFullAddress(originFullAddress);
+        ride.setOriginPrivateLabel(originPrivateLabel);
+        ride.setDestinationLat(destinationLat);
+        ride.setDestinationLng(destinationLng);
+        ride.setDestinationLabel(destinationLabel);
+        ride.setDestinationFullAddress(destinationFullAddress);
+        ride.setDestinationPrivateLabel(destinationPrivateLabel);
+        ride.setDepartAt(departAt);
+        ride.setExpiresAt(DepartWindow.expiresAt(departAt));
+        ride.setAvailableSeats(seats);
+        ride.setPricePerSeat(pricePerSeat != null ? pricePerSeat : BigDecimal.ZERO);
+        ride.setRecurring(true);
+        ride.setScheduleId(scheduleId);
+        ride.setOccurrenceDate(occurrenceDate);
+        rideRepo.save(ride);
+        return ride;
+    }
+
     public List<RideResponse> myRides(UUID ownerId) {
         return rideRepo.findByOwnerIdOrderByDepartAtDesc(ownerId).stream()
                 .map(r -> toResponse(r, null, null, ownerId))
@@ -130,8 +193,10 @@ public class RideService {
     }
 
     public List<RideResponse> openOwned(UUID ownerId) {
+        Instant now = Instant.now();
         return rideRepo.findByOwnerIdAndStatusInOrderByDepartAtAsc(ownerId, List.of("open", "full"))
                 .stream()
+                .filter(r -> r.getDepartAt().isAfter(now))
                 .map(r -> toResponse(r, null, null, ownerId))
                 .toList();
     }
@@ -158,7 +223,7 @@ public class RideService {
         if (!ride.getOwnerId().equals(ownerId)) {
             throw ApiException.forbidden("Only the host can cancel this ride");
         }
-        if ("completed".equals(ride.getStatus()) || "cancelled".equals(ride.getStatus())) {
+        if ("completed".equals(ride.getStatus()) || "cancelled".equals(ride.getStatus()) || "expired".equals(ride.getStatus())) {
             throw ApiException.badRequest("Ride cannot be cancelled");
         }
         ride.setStatus("cancelled");
@@ -178,7 +243,7 @@ public class RideService {
         }
 
         ProfileEntity profile = profileRepo.findById(viewerId).orElse(null);
-        List<RideEntity> open = rideRepo.findByStatusAndDepartAtAfterOrderByDepartAtAsc("open", Instant.now().minusSeconds(3600));
+        List<RideEntity> open = rideRepo.findByStatusAndDepartAtAfterOrderByDepartAtAsc("open", Instant.now());
 
         List<RideResponse> results = new ArrayList<>();
         for (RideEntity ride : open) {
@@ -325,9 +390,11 @@ public class RideService {
                 r.getDestinationFullAddress(),
                 ownerView ? r.getDestinationPrivateLabel() : null,
                 r.getDepartAt(),
+                r.getExpiresAt(),
                 r.getAvailableSeats(),
                 r.getPricePerSeat(),
                 r.isRecurring(),
+                r.getScheduleId(),
                 matchType,
                 detourKm,
                 geometry,
@@ -402,9 +469,11 @@ public class RideService {
             String destinationFullAddress,
             String destinationPrivateLabel,
             Instant departAt,
+            Instant expiresAt,
             int availableSeats,
             BigDecimal pricePerSeat,
             boolean recurring,
+            UUID scheduleId,
             String commuteMatchType,
             Double detourKm,
             Object routeGeometry,

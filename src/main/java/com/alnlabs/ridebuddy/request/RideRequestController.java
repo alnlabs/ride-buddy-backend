@@ -38,6 +38,11 @@ public class RideRequestController {
         return service.inbox(AuthUser.requireUserId());
     }
 
+    @GetMapping("/rides/{rideId}/matching-needs")
+    public List<RideRequestService.InboxItem> matchingNeeds(@PathVariable UUID rideId) {
+        return service.matchingNeedsForRide(AuthUser.requireUserId(), rideId);
+    }
+
     @GetMapping("/ride-requests/{id}")
     public RideRequestService.RideRequestResponse get(@PathVariable UUID id) {
         return service.get(id, AuthUser.requireUserId());

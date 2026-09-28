@@ -22,7 +22,7 @@ REST (+ WebSocket) API for **Ride Buddy** — employee-focused carpool, job refe
 | Container | Docker + Docker Compose |
 | Docs | OpenAPI 3 (springdoc) |
 
-**Mobile client:** [`../ride-buddy-mobile`](../ride-buddy-mobile) (Flutter)
+**Mobile client:** [`../ride-buddy-mobile`](../ride-buddy-mobile) (Expo)
 
 ---
 
@@ -31,7 +31,7 @@ REST (+ WebSocket) API for **Ride Buddy** — employee-focused carpool, job refe
 ```mermaid
 flowchart TB
   subgraph mobile [ride-buddy-mobile]
-    Flutter[Flutter App]
+    Expo[Expo App]
   end
 
   subgraph backend [ride-buddy-backend]
@@ -51,8 +51,8 @@ flowchart TB
     S3[Object Storage]
   end
 
-  Flutter --> API
-  Flutter --> WS
+  Expo --> API
+  Expo --> WS
   Services --> Razorpay
   Services --> FCM
   Services --> SMS

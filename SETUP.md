@@ -101,7 +101,7 @@ export $(grep -v '^#' .env | xargs)
 mvn spring-boot:run
 ```
 
-### 5. Point the Flutter app at the API
+### 5. Point the Expo app at the API
 
 - iOS Simulator: `API_BASE_URL=http://127.0.0.1:8080/api/v1`
 - Android emulator: `API_BASE_URL=http://10.0.2.2:8080/api/v1`
@@ -501,7 +501,7 @@ curl -s -X POST http://127.0.0.1:8080/api/v1/auth/otp/verify \
 |-------|----------------|
 | Port `5432` already in use | Dev Compose uses host **`5433`**. Keep `DB_PORT=5433` for local. |
 | `psql: command not found` | Use Docker exec to run SQL, or install client tools (`libpq` / `postgresql-client`). |
-| Flutter can’t reach API | Emulator ≠ `localhost`. Use `10.0.2.2` (Android) or LAN IP (device). Allow firewall for `8080` on the laptop. |
+| Expo app can’t reach API | Emulator ≠ `localhost`. Use `10.0.2.2` (Android) or LAN IP (device). Allow firewall for `8080` on the laptop. |
 | JWT / 401 after restart | Same `JWT_SECRET` must persist across deploys. |
 | Production OTP always `123456` | Set `APP_AUTH_MOCK_OTP=false` and integrate a real OTP channel. |
 | Mail / office verification | Placeholder only — codes are logged / mocked until SMTP is wired. |
